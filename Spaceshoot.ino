@@ -1,5 +1,6 @@
 #include <Arduino_GFX_Library.h>
 #include <TouchScreen.h>
+#include <EEPROM.h> 
 
 #define YP A1
 #define XM A2
@@ -32,6 +33,9 @@ int colorIndex = 0;
 
 int starX[5];
 int starY[5];
+
+int highScore = 0; 
+int eeAddress = 0; 
 
 uint16_t bgColors[12] = {0x0000, 0xFFFF, 0xF800, 0x07E0, 0x001F, 0xFFE0, 0x07FF, 0xF81F, 0xFC00, 0x8010, 0xFE19, 0x8200};
 uint16_t uiColors[12] = {0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF};
@@ -89,17 +93,40 @@ void resetGame() {
 void setup() {
   gfx->begin();
   randomSeed(analogRead(A5));
+  
+  EEPROM.get(eeAddress, highScore);
+  if(highScore < 0 || highScore > 30000) {
+    highScore = 0;
+  }
+  
   resetGame();
 }
 
 void loop() {
   if(isGameOver) {
+    if(score > highScore) {
+      highScore = score;
+      EEPROM.put(eeAddress, highScore);
+    }
+
     gfx->fillScreen(0xF800);
     
-    gfx->setCursor(12, 70);
+    gfx->setCursor(12, 60);
     gfx->setTextColor(0xFFFF);
     gfx->setTextSize(4);
     gfx->print("GAME OVER");
+    
+    gfx->setCursor(15, 130);
+    gfx->setTextColor(0xFFE0); 
+    gfx->setTextSize(2);
+    gfx->print("SCORED: ");
+    gfx->print(score);
+
+    gfx->setCursor(15, 170);
+    gfx->setTextColor(0x07FF); 
+    gfx->setTextSize(2);
+    gfx->print("HIGHEST SCORE: ");
+    gfx->print(highScore);
     
     gfx->setCursor(54, 280);
     gfx->setTextColor(0xFFFF);
@@ -194,7 +221,6 @@ void loop() {
   for(int i = 50; i < 320; i += 25) {
     gfx->drawFastVLine(120, i, 12, colorIndex == 0 ? 0x18E3 : uiColors[colorIndex]);
   }
-  
   
   if(obsY + 20 >= playerY - 10 && obsY <= playerY + 10) {
     if(obsLane == playerLane) {

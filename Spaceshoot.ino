@@ -15,6 +15,8 @@ TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
 Arduino_DataBus *bus = new Arduino_SWPAR8(A2, A3, A1, A0, 8, 9, 2, 3, 4, 5, 6, 7);
 Arduino_GFX *gfx = new Arduino_ILI9341(bus, A4, 0, false);
 
+int gameState = 0;
+
 int playerX = 60;
 int playerY = 290;
 int playerLane = 0;
@@ -39,11 +41,11 @@ int starY[NUM_STARS];
 int highScore = 0;
 int eeAddress = 0;
 
-uint16_t bgColors[12] = {0x0000, 0xFFFF, 0xF800, 0x07E0, 0x001F, 0xFFE0, 0x07FF, 0xF81F, 0xFC00, 0x8010, 0xFE19, 0x8200};
-uint16_t uiColors[12] = {0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF};
-uint16_t shipC1[12] = {0x07FF, 0x001F, 0xFFE0, 0xF800, 0xFFE0, 0x001F, 0xF800, 0xFFE0, 0x001F, 0xFFE0, 0x001F, 0x07FF};
-uint16_t shipC2[12] = {0x001F, 0xF800, 0x0000, 0x001F, 0x07E0, 0xF800, 0x001F, 0x001F, 0xF800, 0x0000, 0xF800, 0xFFE0};
-uint16_t shipC3[12] = {0xF800, 0xF800, 0xFFE0, 0xF800, 0xF800, 0xF800, 0xF800, 0xFFE0, 0xF800, 0xFFE0, 0xF800, 0xF800};
+uint16_t bgColors[12]  = {0x0000, 0xFFFF, 0xF800, 0x07E0, 0x001F, 0xFFE0, 0x07FF, 0xF81F, 0xFC00, 0x8010, 0xFE19, 0x8200};
+uint16_t uiColors[12]  = {0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF};
+uint16_t shipC1[12]    = {0x07FF, 0x001F, 0xFFE0, 0xF800, 0xFFE0, 0x001F, 0xF800, 0xFFE0, 0x001F, 0xFFE0, 0x001F, 0x07FF};
+uint16_t shipC2[12]    = {0x001F, 0xF800, 0x0000, 0x001F, 0x07E0, 0xF800, 0x001F, 0x001F, 0xF800, 0x0000, 0xF800, 0xFFE0};
+uint16_t shipC3[12]    = {0xF800, 0xF800, 0xFFE0, 0xF800, 0xF800, 0xF800, 0xF800, 0xFFE0, 0xF800, 0xFFE0, 0xF800, 0xF800};
 uint16_t obsColors[12] = {0xFDA0, 0xF800, 0x07FF, 0x001F, 0xFDA0, 0xF800, 0x001F, 0x07E0, 0x001F, 0xF800, 0x07FF, 0xFDA0};
 
 uint8_t asteroids[3][8] = {
@@ -78,13 +80,62 @@ void drawAsteroid(int x, int y, uint16_t assetColor, uint16_t bgColor, int type)
   }
 }
 
+void drawHome() {
+  gfx->fillScreen(0x0000);
+  
+  for(int i = 0; i < 35; i++) {
+    uint16_t starColor = (i % 3 == 0) ? 0x07FF : ((i % 2 == 0) ? 0xFDA0 : 0xFFFF);
+    gfx->fillRect(random(0, 240), random(0, 320), 2, 2, starColor);
+  }
+
+  drawPlayer(120, 85, 0x07FF, 0x001F, 0xF800);
+  
+  gfx->fillRect(118, 25, 4, 35, 0xF800);
+  gfx->fillRect(116, 20, 8, 5, 0xFFFF);
+  
+  drawAsteroid(40, 35, 0xFDA0, 0x0000, 0);
+  drawAsteroid(200, 95, 0x07E0, 0x0000, 1);
+  drawAsteroid(55, 115, 0xF800, 0x0000, 2);
+
+  gfx->setCursor(32, 192);
+  gfx->setTextColor(0x18E3);
+  gfx->setTextSize(3);
+  gfx->print("SPACE");
+  gfx->setCursor(122, 192);
+  gfx->setTextColor(0x03E0);
+  gfx->print("SHOOT");
+
+  gfx->setCursor(30, 190);
+  gfx->setTextColor(0x07FF);
+  gfx->setTextSize(3);
+  gfx->print("SPACE");
+  gfx->setCursor(120, 190);
+  gfx->setTextColor(0x07E0);
+  gfx->setTextSize(3);
+  gfx->print("SHOOT");
+
+  gfx->drawFastHLine(22, 178, 65, 0xFFFF);
+  gfx->drawFastHLine(80, 179, 135, 0xFFFF);
+  gfx->drawFastHLine(20, 222, 140, 0xFFFF);
+  gfx->drawFastHLine(155, 221, 65, 0xFFFF);
+  
+  gfx->drawFastVLine(22, 180, 18, 0xFFFF);
+  gfx->drawFastVLine(21, 195, 25, 0xFFFF);
+  gfx->drawFastVLine(215, 176, 22, 0xFFFF);
+  gfx->drawFastVLine(216, 192, 28, 0xFFFF);
+
+  gfx->fillRect(38, 263, 164, 44, 0xFFFF);
+  gfx->fillRect(40, 265, 160, 40, 0xF800);
+  gfx->setCursor(54, 277);
+  gfx->setTextColor(0xFFFF);
+  gfx->setTextSize(2);
+  gfx->print("TAP TO PLAY");
+}
+
 void drawUI() {
   gfx->fillRect(0, 0, 240, 45, bgColors[colorIndex]);
   gfx->drawRect(0, 0, 240, 45, colorIndex == 0 ? 0x07FF : uiColors[colorIndex]);
-  gfx->setCursor(10, 14);
-  gfx->setTextColor(colorIndex == 0 ? 0x07FF : uiColors[colorIndex]);
-  gfx->setTextSize(2);
-  gfx->print("SPACESHOOT");
+  
   gfx->setCursor(140, 14);
   gfx->setTextColor(colorIndex == 0 ? 0x07E0 : uiColors[colorIndex]);
   gfx->setTextSize(2);
@@ -120,10 +171,24 @@ void setup() {
   if (highScore < 0 || highScore > 30000) {
     highScore = 0;
   }
-  resetGame();
+  gameState = 0;
+  drawHome();
+  delay(500);
 }
 
 void loop() {
+  if (gameState == 0) {
+    TSPoint p = ts.getPoint();
+    pinMode(XM, OUTPUT);
+    pinMode(YP, OUTPUT);
+    if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+      gameState = 1;
+      resetGame();
+      delay(200);
+    }
+    return;
+  }
+
   if (isGameOver) {
     if (score > highScore) {
       highScore = score;
@@ -147,13 +212,15 @@ void loop() {
     gfx->setCursor(54, 280);
     gfx->setTextColor(0xFFFF);
     gfx->setTextSize(2);
-    gfx->print("TOUCH TO GO");
+    gfx->print("TOUCH TO HOME");
     while (true) {
       TSPoint p = ts.getPoint();
       pinMode(XM, OUTPUT);
       pinMode(YP, OUTPUT);
       if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
-        resetGame();
+        gameState = 0;
+        drawHome();
+        delay(200);
         return;
       }
       delay(10);

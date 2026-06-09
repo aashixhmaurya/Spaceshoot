@@ -16,6 +16,7 @@ Arduino_DataBus *bus = new Arduino_SWPAR8(A2, A3, A1, A0, 8, 9, 2, 3, 4, 5, 6, 7
 Arduino_GFX *gfx = new Arduino_ILI9341(bus, A4, 0, false);
 
 int gameState = 0;
+int lives = 3;
 
 int playerX = 60;
 int playerY = 290;
@@ -27,6 +28,12 @@ int obsLane = 0;
 int obsSpeed = 3;
 int obsType = 0;
 bool isGameOver = false;
+
+int healthDropY = 45;
+int healthDropX = 60;
+int healthDropLane = 0;
+bool healthDropActive = false;
+int nextHealthScore = 350;
 
 int score = 0;
 int lastScore = -1;
@@ -132,6 +139,56 @@ void drawHome() {
   gfx->print("TAP TO PLAY");
 }
 
+void drawHeart(int x, int y, uint16_t color) {
+  int s = 2; 
+  int sx = x - 5 * s;
+  int sy = y - 4 * s;
+
+  gfx->fillRect(sx + 2*s, sy + 0*s, 2*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 7*s, sy + 0*s, 2*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 1*s, sy + 1*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 2*s, sy + 1*s, 2*s, 1*s, (color == 0xFFFF) ? color : 0xFFFF);
+  gfx->fillRect(sx + 4*s, sy + 1*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 6*s, sy + 1*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 7*s, sy + 1*s, 2*s, 1*s, color);
+  gfx->fillRect(sx + 9*s, sy + 1*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 0*s, sy + 2*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 1*s, sy + 2*s, 2*s, 1*s, (color == 0xFFFF) ? color : 0xFFFF);
+  gfx->fillRect(sx + 3*s, sy + 2*s, 2*s, 1*s, color);
+  gfx->fillRect(sx + 5*s, sy + 2*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 6*s, sy + 2*s, 4*s, 1*s, color);
+  gfx->fillRect(sx + 10*s, sy + 2*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 0*s, sy + 3*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 1*s, sy + 3*s, 1*s, 1*s, (color == 0xFFFF) ? color : 0xFFFF);
+  gfx->fillRect(sx + 2*s, sy + 3*s, 8*s, 1*s, color);
+  gfx->fillRect(sx + 10*s, sy + 3*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 0*s, sy + 4*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 1*s, sy + 4*s, 9*s, 1*s, color);
+  gfx->fillRect(sx + 10*s, sy + 4*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 1*s, sy + 5*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 2*s, sy + 5*s, 7*s, 1*s, color);
+  gfx->fillRect(sx + 9*s, sy + 5*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 2*s, sy + 6*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 3*s, sy + 6*s, 5*s, 1*s, color);
+  gfx->fillRect(sx + 8*s, sy + 6*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 3*s, sy + 7*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 4*s, sy + 7*s, 3*s, 1*s, color);
+  gfx->fillRect(sx + 7*s, sy + 7*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 4*s, sy + 8*s, 1*s, 1*s, 0x0000);
+  gfx->fillRect(sx + 5*s, sy + 8*s, 1*s, 1*s, color);
+  gfx->fillRect(sx + 6*s, sy + 8*s, 1*s, 1*s, 0x0000);
+  
+  gfx->fillRect(sx + 5*s, sy + 9*s, 1*s, 1*s, 0x0000);
+}
+
 void drawUI() {
   gfx->fillRect(0, 0, 240, 45, bgColors[colorIndex]);
   gfx->drawRect(0, 0, 240, 45, colorIndex == 0 ? 0x07FF : uiColors[colorIndex]);
@@ -140,6 +197,11 @@ void drawUI() {
   gfx->setTextColor(colorIndex == 0 ? 0x07E0 : uiColors[colorIndex]);
   gfx->setTextSize(2);
   gfx->print("SCR:");
+
+  uint16_t heartColor = (colorIndex == 2) ? 0xFFFF : 0xF800;
+  for (int i = 0; i < lives; i++) {
+    drawHeart(25 + (i * 35), 20, heartColor);
+  }
 }
 
 void resetGame() {
@@ -150,6 +212,9 @@ void resetGame() {
   obsX = (obsLane == 0) ? 60 : 180;
   obsType = random(0, 3);
   isGameOver = false;
+  healthDropActive = false;
+  nextHealthScore = 350;
+  lives = 3;
   score = 0;
   lastScore = -1;
   colorIndex = 0;
@@ -212,7 +277,7 @@ void loop() {
     gfx->setCursor(54, 280);
     gfx->setTextColor(0xFFFF);
     gfx->setTextSize(2);
-    gfx->print("TOUCH TO HOME");
+    gfx->print("TOUCH TO GO");
     while (true) {
       TSPoint p = ts.getPoint();
       pinMode(XM, OUTPUT);
@@ -230,6 +295,14 @@ void loop() {
   if (millis() - lastScoreTime >= 150) {
     score++;
     lastScoreTime = millis();
+  }
+
+  if (score >= nextHealthScore && !healthDropActive) {
+    healthDropActive = true;
+    healthDropLane = random(0, 2);
+    healthDropX = (healthDropLane == 0) ? 60 : 180;
+    healthDropY = 45;
+    nextHealthScore += 350;
   }
 
   int speedLevel = score / 100;
@@ -282,6 +355,29 @@ void loop() {
     }
   }
 
+  if (healthDropActive) {
+    int oldHY = healthDropY;
+    healthDropY += obsSpeed;
+    if (healthDropY > 320) {
+      gfx->fillRect(healthDropX - 12, oldHY - 10, 24, 24, bgColors[colorIndex]);
+      healthDropActive = false;
+    } else {
+      gfx->fillRect(healthDropX - 12, oldHY - 10, 24, 24, bgColors[colorIndex]);
+      drawHeart(healthDropX, healthDropY, 0xF800);
+    }
+    if (healthDropY + 10 >= playerY - 20 && healthDropY - 10 <= playerY + 20) {
+      if (healthDropLane == playerLane) {
+        gfx->fillRect(healthDropX - 12, healthDropY - 10, 24, 24, bgColors[colorIndex]);
+        healthDropActive = false;
+        if (lives < 3) {
+          lives++;
+          drawUI();
+        }
+        drawPlayer(playerX, playerY, shipC1[colorIndex], shipC2[colorIndex], shipC3[colorIndex]);
+      }
+    }
+  }
+
   int oldY = obsY;
   obsY += obsSpeed;
 
@@ -298,7 +394,17 @@ void loop() {
 
   if (obsY + 48 >= playerY - 15 && obsY <= playerY + 15) {
     if (obsLane == playerLane) {
-      isGameOver = true;
+      lives--;
+      if (lives <= 0) {
+        isGameOver = true;
+      } else {
+        gfx->fillRect(obsX - 24, obsY, 48, 48, bgColors[colorIndex]);
+        obsY = 45;
+        obsLane = random(0, 2);
+        obsX = (obsLane == 0) ? 60 : 180;
+        obsType = random(0, 3);
+        drawUI();
+      }
     }
   }
 

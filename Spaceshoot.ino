@@ -2,7 +2,6 @@
 #include <EEPROM.h>
 #include <TouchScreen.h>
 
-
 #define YP A3
 #define XM A2
 #define YM 9
@@ -25,21 +24,24 @@
 #define SCREEN_HEIGHT 320
 #define SCREEN_WIDTH 240
 
+#define GLOW_STAR_MIN_DIST 48
+
 uint16_t bgColors[12] = {0x0000, 0xFFFF, 0xF800, 0x07E0, 0x001F, 0xFFE0,
                          0x07FF, 0xF81F, 0xFC00, 0x8010, 0xFE19, 0x8200};
 uint16_t uiColors[12] = {0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000,
                          0x0000, 0xFFFF, 0x0000, 0xFFFF, 0x0000, 0xFFFF};
 
 uint8_t asteroids[8][8] = {
-  {0x3C, 0x7E, 0xDF, 0xFF, 0xFB, 0x7F, 0x3E, 0x1C}, 
-  {0x38, 0x7C, 0xFE, 0xFF, 0xFF, 0x7E, 0x3C, 0x18}, 
-  {0x38, 0x7C, 0xFE, 0xFE, 0x7C, 0x38, 0x1C, 0x08}, 
-  {0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x3C, 0x18}, 
-  {0x18, 0x7E, 0xFF, 0xFF, 0x7F, 0x7E, 0x3C, 0x18}, 
+  {0x3C, 0x7E, 0xDF, 0xFF, 0xFB, 0x7F, 0x3E, 0x1C},
+  {0x38, 0x7C, 0xFE, 0xFF, 0xFF, 0x7E, 0x3C, 0x18},
+  {0x38, 0x7C, 0xFE, 0xFE, 0x7C, 0x38, 0x1C, 0x08},
+  {0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x3C, 0x18},
+  {0x18, 0x7E, 0xFF, 0xFF, 0x7F, 0x7E, 0x3C, 0x18},
   {0x38, 0x7C, 0xFE, 0xEE, 0xFE, 0x7C, 0x38, 0x10},
   {0x38, 0x7C, 0xFE, 0xFF, 0x7F, 0x3E, 0x3C, 0x18},
-  {0x18, 0x7C, 0xFF, 0xDF, 0xFC, 0x78, 0x38, 0x10} 
+  {0x18, 0x7C, 0xFF, 0xDF, 0xFC, 0x78, 0x38, 0x10}
 };
+
 uint16_t shipC1[12] = {0xFFE0, 0x001F, 0xFFE0, 0xF800, 0xFFE0, 0x001F,
                        0xF800, 0xFFE0, 0x001F, 0xFFE0, 0x001F, 0x07FF};
 uint16_t shipC2[12] = {0x001F, 0xF800, 0x0000, 0x001F, 0x07E0, 0xF800,
@@ -56,58 +58,99 @@ Arduino_GFX *gfx = new Arduino_ILI9341(bus, A4, 0, false);
 
 int state = 0;
 int lives = 3;
-int px = LEFT_LANE, py = 290;
+int px = LEFT_LANE;
+int py = 290;
 int player_lane = 0;
 
-int obsY = 45, obsX = LEFT_LANE;
-int obsLane = 0, spd = 3, obs_type = 0;
+int obstacleY = 45;
+int obstacleX = LEFT_LANE;
+int obstacleLane = 0;
+int spd = 3;
+int obstacleType = 0;
 bool game_over = false;
 
-int heartY = 45, heartX = LEFT_LANE;
+int heartY = 45;
+int heartX = LEFT_LANE;
 int heartLane = 0;
 bool spawnHeart = false;
-int next_hp_score = 350;
+int nextHealthScore = 350;
 
-int score = 0, lastScore = -1;
+int score = 0;
+int lastScore = -1;
 unsigned long lastScoreTime = 0;
-int frameDelay = 7, theme_idx = 0;
+int frameDelay = 7;
+int themeIndex = 0;
 
-int starX[NUM_STARS], starY[NUM_STARS];
-uint8_t starType[NUM_STARS]; // 0=normal, 1=glowing, 2=shooting/falling
+int starX[NUM_STARS];
+int starY[NUM_STARS];
+uint8_t starType[NUM_STARS];
 int hiScore = 0;
 int eeAddress = 0;
 
 uint8_t pickStarType() {
   int r = random(0, 100);
   if (r < 5)
-    return 2; // rare shooting / falling star
-  if (r < 38)
-    return 1; // glowing
-  return 0;   // normal
+    return 2;
+  if (r < 25)
+    return 1;
+  return 0;
+}
+
+bool glowStarTooClose(int x, int y, int skipIdx) {
+  long minDistSq = (long)GLOW_STAR_MIN_DIST * GLOW_STAR_MIN_DIST;
+  for (int j = 0; j < NUM_STARS; j++) {
+    if (j == skipIdx || starType[j] != 1)
+      continue;
+    long dx = starX[j] - x;
+    long dy = starY[j] - y;
+    if (dx * dx + dy * dy < minDistSq)
+      return true;
+  }
+  return false;
+}
+
+void placeStar(int i, bool randomY) {
+  uint8_t t = pickStarType();
+  for (int attempt = 0; attempt < 12; attempt++) {
+    int nx = random(0, SCREEN_WIDTH);
+    int ny = randomY ? random(46, SCREEN_HEIGHT) : 46;
+    if (t != 1 || !glowStarTooClose(nx, ny, i)) {
+      starX[i] = nx;
+      starY[i] = ny;
+      starType[i] = t;
+      return;
+    }
+  }
+
+  starX[i] = random(0, SCREEN_WIDTH);
+  starY[i] = randomY ? random(46, SCREEN_HEIGHT) : 46;
+  starType[i] = 0;
 }
 
 void eraseStar(int i) {
   if (starType[i] == 2)
-    gfx->fillRect(starX[i] - 10, starY[i] - 10, 16, 16, bgColors[theme_idx]);
+    gfx->fillRect(starX[i] - 10, starY[i] - 10, 16, 16, bgColors[themeIndex]);
   else if (starType[i] == 1)
-    gfx->fillRect(starX[i] - 1, starY[i] - 1, 5, 5, bgColors[theme_idx]);
+    gfx->fillRect(starX[i] - 1, starY[i] - 1, 5, 5, bgColors[themeIndex]);
   else
-    gfx->drawPixel(starX[i], starY[i], bgColors[theme_idx]);
+    gfx->drawPixel(starX[i], starY[i], bgColors[themeIndex]);
 }
 
 void drawStar(int i, uint16_t color) {
   if (starType[i] == 0) {
     gfx->drawPixel(starX[i], starY[i], color);
   } else if (starType[i] == 1) {
-    // glowing star: bright center + soft cross glow
     gfx->fillRect(starX[i], starY[i], 2, 2, color);
-    gfx->drawPixel(starX[i] + 1, starY[i] - 1, color);
-    gfx->drawPixel(starX[i] + 1, starY[i] + 2, color);
-    gfx->drawPixel(starX[i] - 1, starY[i] + 1, color);
-    gfx->drawPixel(starX[i] + 2, starY[i] + 1, color);
+    unsigned long phase = (millis() + (unsigned long)i * 317UL) % 1600UL;
+    if (phase < 500) {
+      gfx->drawPixel(starX[i] + 1, starY[i] - 1, color);
+      gfx->drawPixel(starX[i] + 1, starY[i] + 2, color);
+      gfx->drawPixel(starX[i] - 1, starY[i] + 1, color);
+      gfx->drawPixel(starX[i] + 2, starY[i] + 1, color);
+    }
   } else {
-    // shooting / falling star: bigger head + thicker diagonal trail
-    int x = starX[i], y = starY[i];
+    int x = starX[i];
+    int y = starY[i];
     gfx->fillRect(x, y, 3, 3, color);
     gfx->fillRect(x - 2, y - 2, 2, 2, color);
     gfx->fillRect(x - 4, y - 4, 2, 2, color);
@@ -118,21 +161,11 @@ void drawStar(int i, uint16_t color) {
   }
 }
 
-bool starOverlapsPlayer(int i) {
-  int pad = (starType[i] == 2) ? 12 : ((starType[i] == 1) ? 5 : 1);
-  int ox = (starType[i] == 2) ? -8 : ((starType[i] == 1) ? -1 : 0);
-  if (starX[i] + ox + pad > px - 18 && starX[i] + ox < px + 18) {
-    if (starY[i] + ox + pad > py - 26 && starY[i] + ox < py + 20)
-      return true;
-  }
-  return false;
-}
-
 void setup() {
   gfx->begin();
   randomSeed(analogRead(A5));
 
-  // get score
+  // keep the saved high score if eeprom still looks valid
   EEPROM.get(eeAddress, hiScore);
   if (hiScore < 0 || hiScore > 30000)
     hiScore = 0;
@@ -206,12 +239,15 @@ void loop() {
     lastScoreTime = millis();
   }
 
-  if (score >= next_hp_score && !spawnHeart) {
+  if (score >= nextHealthScore && !spawnHeart) {
     spawnHeart = true;
     heartLane = random(0, 2);
-    heartX = (heartLane == 0) ? LEFT_LANE : RIGHT_LANE;
+    if (heartLane == 0)
+      heartX = LEFT_LANE;
+    else
+      heartX = RIGHT_LANE;
     heartY = 45;
-    next_hp_score += 350;
+    nextHealthScore += 350;
   }
 
   int speedLevel = score / 100;
@@ -221,28 +257,28 @@ void loop() {
   if (frameDelay < 0)
     frameDelay = 0;
 
-  if (newColorIndex != theme_idx) {
-    theme_idx = newColorIndex;
-    gfx->fillScreen(bgColors[theme_idx]);
+  if (newColorIndex != themeIndex) {
+    themeIndex = newColorIndex;
+    gfx->fillScreen(bgColors[themeIndex]);
     drawUI();
-    drawPlayer(px, py, shipC1[theme_idx], shipC2[theme_idx], shipC3[theme_idx]);
+    drawPlayer(px, py, shipC1[themeIndex], shipC2[themeIndex],
+               shipC3[themeIndex]);
   }
 
   if (score != lastScore) {
-    gfx->fillRect(188, 10, 50, 25, bgColors[theme_idx]);
+    gfx->fillRect(188, 10, 50, 25, bgColors[themeIndex]);
     gfx->setCursor(188, 14);
 
-    uint16_t txtCol = (theme_idx == 0) ? 0x07E0 : uiColors[theme_idx];
+    uint16_t txtCol = (themeIndex == 0) ? 0x07E0 : uiColors[themeIndex];
     gfx->setTextColor(txtCol);
     gfx->setTextSize(2);
     gfx->print(score);
     lastScore = score;
   }
 
-  // stars background
+  // stars scroll in the background behind the ship
   for (int i = 0; i < NUM_STARS; i++) {
-    if (!starOverlapsPlayer(i))
-      eraseStar(i);
+    eraseStar(i);
 
     if (starType[i] == 2) {
       starY[i] += 4;
@@ -252,18 +288,12 @@ void loop() {
     }
 
     if (starY[i] > SCREEN_HEIGHT || starX[i] > SCREEN_WIDTH + 4) {
-      starY[i] = 46;
-      starX[i] = random(0, SCREEN_WIDTH);
-      starType[i] = pickStarType();
+      placeStar(i, false);
     }
 
-    if (!starOverlapsPlayer(i)) {
-      uint16_t sc = (theme_idx == 0) ? 0xFFFF : uiColors[theme_idx];
-      drawStar(i, sc);
-    }
+    drawStar(i, (themeIndex == 0) ? 0xFFFF : uiColors[themeIndex]);
   }
 
-  // touch input handling
   TSPoint p = ts.getPoint();
   pinMode(XM, OUTPUT);
   pinMode(YP, OUTPUT);
@@ -284,10 +314,10 @@ void loop() {
       }
 
       if (oldX != px) {
-        drawPlayer(oldX, py, bgColors[theme_idx], bgColors[theme_idx],
-                   bgColors[theme_idx]);
-        drawPlayer(px, py, shipC1[theme_idx], shipC2[theme_idx],
-                   shipC3[theme_idx]);
+        drawPlayer(oldX, py, bgColors[themeIndex], bgColors[themeIndex],
+                   bgColors[themeIndex]);
+        drawPlayer(px, py, shipC1[themeIndex], shipC2[themeIndex],
+                   shipC3[themeIndex]);
       }
     }
   }
@@ -297,50 +327,50 @@ void loop() {
     heartY += spd;
 
     if (heartY > SCREEN_HEIGHT) {
-      gfx->fillRect(heartX - 12, oldHY - 10, 24, 24, bgColors[theme_idx]);
+      gfx->fillRect(heartX - 12, oldHY - 10, 24, 24, bgColors[themeIndex]);
       spawnHeart = false;
     } else {
-      gfx->fillRect(heartX - 12, oldHY - 10, 24, 24, bgColors[theme_idx]);
+      gfx->fillRect(heartX - 12, oldHY - 10, 24, 24, bgColors[themeIndex]);
       drawHeart(heartX, heartY, 0xF800);
     }
 
     if (heartY + 10 >= py - 20 && heartY - 10 <= py + 20) {
       if (heartLane == player_lane) {
-        gfx->fillRect(heartX - 12, heartY - 10, 24, 24, bgColors[theme_idx]);
+        gfx->fillRect(heartX - 12, heartY - 10, 24, 24, bgColors[themeIndex]);
         spawnHeart = false;
 
         if (lives < 3) {
           lives++;
           drawUI();
         }
-        drawPlayer(px, py, shipC1[theme_idx], shipC2[theme_idx],
-                   shipC3[theme_idx]);
+        drawPlayer(px, py, shipC1[themeIndex], shipC2[themeIndex],
+                   shipC3[themeIndex]);
       }
     }
   }
 
-  int oldY = obsY;
-  obsY += spd;
+  int oldY = obstacleY;
+  obstacleY += spd;
 
-  if (obsY > SCREEN_HEIGHT) {
-    gfx->fillRect(obsX - 24, oldY, 48, 48, bgColors[theme_idx]);
+  if (obstacleY > SCREEN_HEIGHT) {
+    gfx->fillRect(obstacleX - 24, oldY, 48, 48, bgColors[themeIndex]);
     spawnAsteroid();
   } else {
-    gfx->fillRect(obsX - 24, oldY, 48, spd, bgColors[theme_idx]);
-    drawAsteroid(obsX, obsY, obsColors[theme_idx], bgColors[theme_idx],
-                 obs_type);
+    gfx->fillRect(obstacleX - 24, oldY, 48, spd, bgColors[themeIndex]);
+    drawAsteroid(obstacleX, obstacleY, obsColors[themeIndex],
+                 bgColors[themeIndex], obstacleType);
   }
 
-  drawPlayer(px, py, shipC1[theme_idx], shipC2[theme_idx], shipC3[theme_idx]);
+  drawPlayer(px, py, shipC1[themeIndex], shipC2[themeIndex], shipC3[themeIndex]);
 
-  // check hit
-  if ((obsY + 48 >= py - 15) && (obsY <= py + 15)) {
-    if (obsLane == player_lane) {
+  // same lane hit — drop a life or end the run
+  if ((obstacleY + 48 >= py - 15) && (obstacleY <= py + 15)) {
+    if (obstacleLane == player_lane) {
       lives--;
       if (lives <= 0) {
         game_over = true;
       } else {
-        gfx->fillRect(obsX - 24, obsY, 48, 48, bgColors[theme_idx]);
+        gfx->fillRect(obstacleX - 24, obstacleY, 48, 48, bgColors[themeIndex]);
         spawnAsteroid();
         drawUI();
       }
@@ -351,56 +381,64 @@ void loop() {
 }
 
 void spawnAsteroid() {
-  obsY = 45;
-  obsLane = random(0, 2);
-  obsX = (obsLane == 0) ? LEFT_LANE : RIGHT_LANE;
-  obs_type = random(0, 8);
+  obstacleY = 45;
+  obstacleLane = random(0, 2);
+  if (obstacleLane == 0)
+    obstacleX = LEFT_LANE;
+  else
+    obstacleX = RIGHT_LANE;
+  obstacleType = random(0, 8);
 }
 
 void resetGame() {
+  // wipe the board and start a clean round
   player_lane = 0;
   px = LEFT_LANE;
-  obsY = 45;
+  obstacleY = 45;
 
-  obsLane = random(0, 2);
-  obsX = (obsLane == 0) ? LEFT_LANE : RIGHT_LANE;
-  obs_type = random(0, 8);
+  obstacleLane = random(0, 2);
+  if (obstacleLane == 0)
+    obstacleX = LEFT_LANE;
+  else
+    obstacleX = RIGHT_LANE;
+  obstacleType = random(0, 8);
 
   game_over = false;
   spawnHeart = false;
-  next_hp_score = 350;
+  nextHealthScore = 350;
 
   lives = 3;
   score = 0;
   lastScore = -1;
-  theme_idx = 0;
+  themeIndex = 0;
   frameDelay = 7;
 
   for (int i = 0; i < NUM_STARS; i++) {
-    starX[i] = random(0, SCREEN_WIDTH);
-    starY[i] = random(46, SCREEN_HEIGHT);
-    starType[i] = pickStarType();
+    starType[i] = 0;
+  }
+  for (int i = 0; i < NUM_STARS; i++) {
+    placeStar(i, true);
   }
 
-  gfx->fillScreen(bgColors[theme_idx]);
+  gfx->fillScreen(bgColors[themeIndex]);
   drawUI();
-  drawPlayer(px, py, shipC1[theme_idx], shipC2[theme_idx], shipC3[theme_idx]);
+  drawPlayer(px, py, shipC1[themeIndex], shipC2[themeIndex], shipC3[themeIndex]);
   lastScoreTime = millis();
 }
 
 void drawUI() {
-  gfx->fillRect(0, 0, SCREEN_WIDTH, 45, bgColors[theme_idx]);
+  gfx->fillRect(0, 0, SCREEN_WIDTH, 45, bgColors[themeIndex]);
 
-  uint16_t borderCol = (theme_idx == 0) ? 0x07FF : uiColors[theme_idx];
+  uint16_t borderCol = (themeIndex == 0) ? 0x07FF : uiColors[themeIndex];
   gfx->drawRect(0, 0, SCREEN_WIDTH, 45, borderCol);
 
   gfx->setCursor(116, 14);
-  uint16_t textCol = (theme_idx == 0) ? 0x07E0 : uiColors[theme_idx];
+  uint16_t textCol = (themeIndex == 0) ? 0x07E0 : uiColors[themeIndex];
   gfx->setTextColor(textCol);
   gfx->setTextSize(2);
   gfx->print("SCORE:");
 
-  uint16_t heartColor = (theme_idx == 2) ? 0xFFFF : 0xF800;
+  uint16_t heartColor = (themeIndex == 2) ? 0xFFFF : 0xF800;
   for (int i = 0; i < lives; i++) {
     drawHeart(25 + (i * 35), 20, heartColor);
   }
@@ -408,7 +446,8 @@ void drawUI() {
 
 void drawHeart(int x, int y, uint16_t color) {
   int s = 2;
-  int sx = x - 5 * s, sy = y - 4 * s;
+  int sx = x - 5 * s;
+  int sy = y - 4 * s;
   uint16_t whiteCol = (color == 0xFFFF) ? color : 0xFFFF;
 
   gfx->fillRect(sx + 2 * s, sy + 0 * s, 2 * s, 1 * s, 0x0000);
@@ -456,9 +495,10 @@ void drawHeart(int x, int y, uint16_t color) {
   gfx->fillRect(sx + 5 * s, sy + 9 * s, 1 * s, 1 * s, 0x0000);
 }
 
-void drawPlayer(int playerX, int playerY, uint16_t c1, uint16_t c2,
-                uint16_t c3) {
-  int x = playerX, y = playerY;
+void drawPlayer(int playerX, int playerY, uint16_t c1,
+                uint16_t c2, uint16_t c3) {
+  int x = playerX;
+  int y = playerY;
 
   gfx->fillCircle(x, y - 5, 8, c1);
   gfx->fillTriangle(x - 6, y - 8, x + 6, y - 8, x, y - 18, c1);
@@ -490,8 +530,8 @@ void drawPlayer(int playerX, int playerY, uint16_t c1, uint16_t c2,
   gfx->drawPixel(x + 2, y - 3, faceC);
 }
 
-void drawAsteroid(int astX, int astY, uint16_t assetColor, uint16_t bgColor,
-                  int type) {
+void drawAsteroid(int astX, int astY, uint16_t assetColor,
+                  uint16_t bgColor, int type) {
   int startX = astX - 24;
   for (int r = 0; r < 8; r++) {
     uint8_t rowByte = asteroids[type][r];

@@ -212,7 +212,12 @@ void loop() {
     gfx->setTextColor(0x07FF);
     gfx->setTextSize(2);
     gfx->print("HIGHEST SCORE: ");
-    gfx->print(hiScore);
+    if (hiScore >= 1000) {
+      gfx->setCursor(15, 195);
+      gfx->print(hiScore);
+    } else {
+      gfx->print(hiScore);
+    }
 
     gfx->setCursor(54, 280);
     gfx->setTextColor(0xFFFF);
